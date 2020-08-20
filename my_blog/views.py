@@ -1,10 +1,11 @@
-from django.shortcuts import render, get_object_or_404
+from django.shortcuts import render, get_object_or_404,redirect
 from django.http import HttpResponse
 from django.views import generic
 from django.urls import reverse,reverse_lazy
 from django.contrib.auth.models import User
 from django.contrib.auth.mixins import LoginRequiredMixin,UserPassesTestMixin
-from . models import Post
+from . models import Post,Comment
+from .forms import CommentForm
 
 class PostListView(generic.ListView):
     model = Post
@@ -23,10 +24,6 @@ class UserPostListView(generic.ListView):
         user = get_object_or_404(User, username = self.kwargs.get('username'))
         return Post.objects.filter(author = user).order_by('-date_posted')
     
-class PostDetailView(generic.DetailView):
-    model = Post
-    context_object_name = "post"
-
 class PostCreateView(LoginRequiredMixin,generic.edit.CreateView):
     model = Post
     fields = ['title','content']
@@ -54,6 +51,21 @@ class PostDeleteView(LoginRequiredMixin,UserPassesTestMixin,generic.edit.DeleteV
 
     def test_func(self):
         return self.get_object().author == self.request.user
+
+def post_details(request,pk):
+    post = Post.objects.get(pk = pk)
+    if request.method == "POST" and request.user.is_authenticated:
+        form = CommentForm(request.POST)
+        form.instance.author = request.user
+        form.instance.post = post
+        if form.is_valid:
+            form.save()
+            return redirect(reverse('post-detail',args=[pk,]))
+    else:
+        form = CommentForm()
+    comments = Comment.objects.filter(post = post).order_by('-date_posted')
+    context = {'post': post, 'comments': comments,'form' : form}
+    return render(request,'my_blog/post_detail.html',context)
 
 def about(request):
     return render(request,'my_blog/about.html',{'title': "About"})
